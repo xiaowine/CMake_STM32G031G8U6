@@ -13,6 +13,9 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -u_printf_float")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -u_printf_float")
+
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
