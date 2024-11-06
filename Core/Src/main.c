@@ -81,15 +81,15 @@ void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
     }
 }
 
-void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
-{
-    if (hadc->Instance == ADC1)
-    {
-        const uint8_t* message = "aaa\r\n";
-        HAL_UART_Transmit(&huart1, message, strlen(message), HAL_MAX_DELAY);
-        // Process adcValues array
-    }
-}
+// void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+// {
+//     if (hadc->Instance == ADC1)
+//     {
+//         const uint8_t* message = "aaa\r\n";
+//         HAL_UART_Transmit(&huart1, message, strlen(message), HAL_MAX_DELAY);
+//         // Process adcValues array
+//     }
+// }
 
 /* USER CODE END PV */
 
