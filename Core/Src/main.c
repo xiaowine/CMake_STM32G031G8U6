@@ -18,11 +18,20 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
+#include "dma.h"
+#include "i2c.h"
+#include "usart.h"
+#include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+#include "u8g2_stm32.h"
+#include "ui.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -30,8 +39,9 @@
 
 static uint32_t pressStartTime = 0;
 static int8_t isPowerBoot = 0;
-
-uint32_t adcValues[4];
+int adcLength = 5;
+volatile uint32_t adcValues[5] = {0};
+double resistance = 0.005;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -45,14 +55,33 @@ uint32_t adcValues[4];
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-DMA_HandleTypeDef hdma_adc1;
-
-UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 
 /* USER CODE BEGIN PV */
+double calculate_voltage(const float adc_voltage)
+{
+    const double R25 = 20000.0; // 20k¦¸
+    const double R26 = 3300.0; // 3.3k¦¸
+    const double voltage_20p = adc_voltage * (R25 + R26) / R26;
+    return voltage_20p;
+}
+
+void a()
+{
+    const double p201v = calculate_voltage((adcValues[2] / 4095.0) * 3.3);
+    const double p202v = calculate_voltage((adcValues[3] / 4095.0) * 3.3);
+    const double n201v = calculate_voltage((adcValues[0] / 4095.0) * 3.3);
+    const double n202v = calculate_voltage((adcValues[1] / 4095.0) * 3.3);
+    const double p201i = (p201v + p202v) / 2.0;
+    const double n201i = (n201v + n202v) / 2.0;
+    const double aaaa = p201i - n201i;
+    const double current = aaaa / resistance * 1000;
+    char buffer[100];
+    snprintf(buffer, sizeof(buffer), "p201i %.4fV n201i %.4fV %.4fmA \r\n", p201i, n201i, current);
+    HAL_UART_Transmit(&huart1, buffer, strlen(buffer),HAL_MAX_DELAY);
+}
+
 void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == KEY_Pin)
@@ -63,13 +92,14 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
         {
             message = "YES\r\n";
             isPowerBoot = 1;
+            HAL_GPIO_TogglePin(XG_GPIO_Port,XG_Pin);
         }
         else
         {
             message = "NO\r\n";
             isPowerBoot = 0;
         }
-        HAL_UART_Transmit(&huart1, message, strlen(message), HAL_MAX_DELAY);
+        HAL_UART_Transmit_IT(&huart1, message, strlen(message));
     }
 }
 
@@ -80,6 +110,7 @@ void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
         pressStartTime = HAL_GetTick(); // Record the time when the button is pressed
     }
 }
+
 
 // void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 // {
@@ -95,17 +126,16 @@ void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
-static void MX_USART1_UART_Init(void);
-static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+float generate_random_float(float min, float max)
+{
+    return min + (max - min) * ((float)rand() / (float)RAND_MAX);
+}
 
 /* USER CODE END 0 */
 
@@ -140,28 +170,24 @@ int main(void)
     MX_DMA_Init();
     MX_USART1_UART_Init();
     MX_ADC1_Init();
+    MX_I2C2_Init();
     /* USER CODE BEGIN 2 */
 
-    uint8_t* a = "Hello World!!!\r\n";
-    HAL_ADC_Start_DMA(&hadc1, adcValues, 4);
-
+    HAL_ADC_Start_DMA(&hadc1, adcValues, adcLength);
+    u8g2_t u8g2;
+    u8g2Init(&u8g2);
     /* USER CODE END 2 */
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        // HAL_UART_Transmit(&huart1, a, strlen(a), HAL_MAX_DELAY);
-        float voltages[4];
-        for (int i = 0; i < 4; i++)
-        {
-            char buffer[100];
-            voltages[i] = (adcValues[i] / 4095.0) * 3.3;
-            snprintf(buffer, sizeof(buffer), "value:%d, Voltages: %.2f V\r\n", adcValues[i], voltages[i]);
-            HAL_UART_Transmit(&huart1, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
-        }
-
-        HAL_Delay(1000); // Delay for 1 second
+        float voltage = generate_random_float(19, 21);
+        float current = generate_random_float(5, 13);
+        float power = voltage * current;
+        updateUI(&u8g2, voltage, current, power);
+        HAL_Delay(1000);
+        // HAL_Delay(100); // Delay for 1 second
 
         /* USER CODE END WHILE */
 
@@ -208,170 +234,6 @@ void SystemClock_Config(void)
     {
         Error_Handler();
     }
-}
-
-/**
-  * @brief ADC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ADC1_Init(void)
-{
-    /* USER CODE BEGIN ADC1_Init 0 */
-
-    /* USER CODE END ADC1_Init 0 */
-
-    ADC_ChannelConfTypeDef sConfig = {0};
-
-    /* USER CODE BEGIN ADC1_Init 1 */
-
-    /* USER CODE END ADC1_Init 1 */
-
-    /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-    */
-    hadc1.Instance = ADC1;
-    hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
-    hadc1.Init.Resolution = ADC_RESOLUTION_12B;
-    hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-    hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
-    hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
-    hadc1.Init.LowPowerAutoWait = DISABLE;
-    hadc1.Init.LowPowerAutoPowerOff = DISABLE;
-    hadc1.Init.ContinuousConvMode = ENABLE;
-    hadc1.Init.NbrOfConversion = 2;
-    hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-    hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-    hadc1.Init.DMAContinuousRequests = DISABLE;
-    hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
-    hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_160CYCLES_5;
-    hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_160CYCLES_5;
-    hadc1.Init.OversamplingMode = DISABLE;
-    hadc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_HIGH;
-    if (HAL_ADC_Init(&hadc1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-
-    /** Configure Regular Channel
-    */
-    sConfig.Channel = ADC_CHANNEL_7;
-    sConfig.Rank = ADC_REGULAR_RANK_1;
-    sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
-    if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-    {
-        Error_Handler();
-    }
-
-    /** Configure Regular Channel
-    */
-    sConfig.Channel = ADC_CHANNEL_6;
-    sConfig.Rank = ADC_REGULAR_RANK_2;
-    if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN ADC1_Init 2 */
-
-    /* USER CODE END ADC1_Init 2 */
-}
-
-/**
-  * @brief USART1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART1_UART_Init(void)
-{
-    /* USER CODE BEGIN USART1_Init 0 */
-
-    /* USER CODE END USART1_Init 0 */
-
-    /* USER CODE BEGIN USART1_Init 1 */
-
-    /* USER CODE END USART1_Init 1 */
-    huart1.Instance = USART1;
-    huart1.Init.BaudRate = 115200;
-    huart1.Init.WordLength = UART_WORDLENGTH_8B;
-    huart1.Init.StopBits = UART_STOPBITS_1;
-    huart1.Init.Parity = UART_PARITY_NONE;
-    huart1.Init.Mode = UART_MODE_TX_RX;
-    huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-    huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-    huart1.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-    huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-    if (HAL_UART_Init(&huart1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    if (HAL_UARTEx_SetTxFifoThreshold(&huart1, UART_TXFIFO_THRESHOLD_1_8) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    if (HAL_UARTEx_SetRxFifoThreshold(&huart1, UART_RXFIFO_THRESHOLD_1_8) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    if (HAL_UARTEx_DisableFifoMode(&huart1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN USART1_Init 2 */
-
-    /* USER CODE END USART1_Init 2 */
-}
-
-/**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-    /* DMA controller clock enable */
-    __HAL_RCC_DMA1_CLK_ENABLE();
-
-    /* DMA interrupt init */
-    /* DMA1_Channel1_IRQn interrupt configuration */
-    HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-}
-
-/**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_GPIO_Init(void)
-{
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    /* USER CODE BEGIN MX_GPIO_Init_1 */
-    /* USER CODE END MX_GPIO_Init_1 */
-
-    /* GPIO Ports Clock Enable */
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-
-    /*Configure GPIO pin Output Level */
-    HAL_GPIO_WritePin(XG_GPIO_Port, XG_Pin, GPIO_PIN_RESET);
-
-    /*Configure GPIO pin : XG_Pin */
-    GPIO_InitStruct.Pin = XG_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(XG_GPIO_Port, &GPIO_InitStruct);
-
-    /*Configure GPIO pin : KEY_Pin */
-    GPIO_InitStruct.Pin = KEY_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    HAL_GPIO_Init(KEY_GPIO_Port, &GPIO_InitStruct);
-
-    /* EXTI interrupt init*/
-    HAL_NVIC_SetPriority(EXTI4_15_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
-
-    /* USER CODE BEGIN MX_GPIO_Init_2 */
-    /* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
