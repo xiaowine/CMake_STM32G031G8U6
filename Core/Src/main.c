@@ -38,10 +38,14 @@
 /* USER CODE BEGIN PTD */
 
 static uint32_t pressStartTime = 0;
+
 static int8_t isPowerBoot = 0;
 int adcLength = 5;
 volatile uint32_t adcValues[5] = {0};
 double resistance = 0.005;
+
+int isShow = 1;
+u8g2_t u8g2;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -93,6 +97,8 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
             message = "YES\r\n";
             isPowerBoot = 1;
             HAL_GPIO_TogglePin(XG_GPIO_Port,XG_Pin);
+            isShow = !isShow;
+            u8g2_SetPowerSave(&u8g2, isShow);
         }
         else
         {
@@ -174,7 +180,6 @@ int main(void)
     /* USER CODE BEGIN 2 */
 
     HAL_ADC_Start_DMA(&hadc1, adcValues, adcLength);
-    u8g2_t u8g2;
     u8g2Init(&u8g2);
     /* USER CODE END 2 */
 
