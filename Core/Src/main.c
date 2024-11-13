@@ -87,8 +87,8 @@ void HAL_GPIO_EXTI_Rising_Callback(const uint16_t GPIO_Pin)
     if (GPIO_Pin == KEY_Pin)
     {
         const uint8_t* message;
-        const uint32_t pressDuration = HAL_GetTick() - pressStartTime; // Calculate the duration of the button press
-        if (pressDuration >= intervals) // Check if the button was pressed for more than 3 seconds
+        const uint32_t pressDuration = HAL_GetTick() - pressStartTime;
+        if (pressDuration >= intervals)
         {
             message = "YES";
             isPowerBoot = 1;
