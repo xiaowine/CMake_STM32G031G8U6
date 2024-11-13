@@ -41,11 +41,18 @@ static uint32_t pressStartTime = 0;
 
 static int8_t isPowerBoot = 0;
 uint32_t adcValues[3] = {0};
-double resistance = 0.005;
 
 int isShow = 1;
 u8g2_t u8g2;
 
+
+double SR = 0.005;
+const double R25 = 20000.0;
+const double R26 = 3300.0;
+const int adc_max = 4095;
+const double adc_max_voltage = 3.3;
+const int magnification = 40;
+const int intervals = 1800;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -63,26 +70,25 @@ u8g2_t u8g2;
 /* USER CODE BEGIN PV */
 
 /* USER CODE BEGIN PV */
-double calculate_voltage(const int adc_value)
+double calculate_voltage(const uint32_t adc_value)
 {
-    const float adc_voltage = adc_value * (3.3 / 4096);
-    const double R25 = 20000.0; // 20k¦¸
-    const double R26 = 3300.0; // 3.3k¦¸
+    const double adc_voltage = adc_value * (adc_max_voltage / adc_max);
+
     return adc_voltage * (R25 + R26) / R26;
 }
 
-double calculate_current(const int adc_value)
+double calculate_current(const uint32_t adc_value)
 {
-    return adc_value * 3.3 / (4095 * 40 * resistance);
+    return adc_value * adc_max_voltage / (adc_max * magnification * SR);
 }
 
-void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
+void HAL_GPIO_EXTI_Rising_Callback(const uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == KEY_Pin)
     {
         const uint8_t* message;
         const uint32_t pressDuration = HAL_GetTick() - pressStartTime; // Calculate the duration of the button press
-        if (pressDuration >= 1000) // Check if the button was pressed for more than 3 seconds
+        if (pressDuration >= intervals) // Check if the button was pressed for more than 3 seconds
         {
             message = "YES";
             isPowerBoot = 1;
@@ -102,7 +108,7 @@ void HAL_GPIO_EXTI_Rising_Callback(uint16_t GPIO_Pin)
     }
 }
 
-void HAL_GPIO_EXTI_Falling_Callback(uint16_t GPIO_Pin)
+void HAL_GPIO_EXTI_Falling_Callback(const uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == KEY_Pin)
     {
@@ -172,7 +178,7 @@ int main(void)
     MX_I2C2_Init();
     /* USER CODE BEGIN 2 */
 
-    HAL_ADC_Start_DMA(&hadc1, adcValues, 3);
+    HAL_ADC_Start_DMA(&hadc1, adcValues, sizeof(adcValues));
     u8g2Init(&u8g2);
     HAL_UART_Transmit_IT(&huart1, "Hello World!\r\n", strlen("Hello World!\r\n"));
     /* USER CODE END 2 */
@@ -181,23 +187,20 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        int current_adc = adcValues[0];
-        int voltage_adc = adcValues[1];
+        const uint32_t current_adc = adcValues[0];
+        const uint32_t voltage_adc = adcValues[1];
         // int temperature_adc = adcValues[3];
 
-        // float b = temperature_adc * (3.3 / 4096);
+        // float b = temperature_adc * (3.3 / 4095);
         // float temperature = (1.43 - b) / 0.0043 + 25;
 
-        const float current = calculate_current(current_adc);
-        double voltage = calculate_voltage(voltage_adc);
+        const double current = calculate_current(current_adc);
+        const double voltage = calculate_voltage(voltage_adc);
 
 
         char data[50];
-
         snprintf(data, sizeof(data), "voltage %d %.2fV \r\n", voltage_adc, voltage);
         HAL_UART_Transmit(&huart1, data, strlen(data),HAL_MAX_DELAY);
-
-
         snprintf(data, sizeof(data), "current %d %.2fA \r\n", current_adc, current);
         HAL_UART_Transmit(&huart1, data, strlen(data),HAL_MAX_DELAY);
 
