@@ -21,6 +21,8 @@
 #include "adc.h"
 #include "dma.h"
 #include "i2c.h"
+#include "iwdg.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -86,11 +88,9 @@ void HAL_GPIO_EXTI_Rising_Callback(const uint16_t GPIO_Pin)
 {
     if (GPIO_Pin == KEY_Pin)
     {
-        const uint8_t* message;
         const uint32_t pressDuration = HAL_GetTick() - pressStartTime;
         if (pressDuration >= intervals)
         {
-            message = "YES";
             isPowerBoot = 1;
             HAL_GPIO_TogglePin(XG_GPIO_Port,XG_Pin);
             isShow = !isShow;
@@ -98,12 +98,11 @@ void HAL_GPIO_EXTI_Rising_Callback(const uint16_t GPIO_Pin)
         }
         else
         {
-            message = "NO";
             isPowerBoot = 0;
         }
         // Print the status of isPowerBoot
         char buffer[50];
-        snprintf(buffer, sizeof(buffer), "isPowerBoot: %d %s \r\n", isPowerBoot, message);
+        snprintf(buffer, sizeof(buffer), "isPowerBoot: %d %d \r\n", isPowerBoot, isShow);
         HAL_UART_Transmit_IT(&huart1, buffer, strlen(buffer));
     }
 }
@@ -116,16 +115,45 @@ void HAL_GPIO_EXTI_Falling_Callback(const uint16_t GPIO_Pin)
     }
 }
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
+{
+    if (htim->Instance == TIM17) // 检查是否为 TIM2 中断
+    {
+        const uint32_t current_adc = adcValues[0];
+        const uint32_t voltage_adc = adcValues[1];
+        // int temperature_adc = adcValues[3];
 
-// void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
-// {
-//     if (hadc->Instance == ADC1)
-//     {
-//         // const uint8_t* message = "aaa\r\n";
-//         // HAL_UART_Transmit(&huart1, message, strlen(message), HAL_MAX_DELAY);
-//         // Process adcValues array
-//     }
-// }
+        // float b = temperature_adc * (3.3 / 4095);
+        // float temperature = (1.43 - b) / 0.0043 + 25;
+
+        const double current = calculate_current(current_adc);
+        const double voltage = calculate_voltage(voltage_adc);
+
+
+        char data[50];
+        snprintf(data, sizeof(data), "voltage %d %.2fV \r\ncurrent %d %.2fA \r\n", voltage_adc, voltage, current_adc,
+                 current);
+        HAL_UART_Transmit_IT(&huart1, data, strlen(data));
+        //
+        // snprintf(data, sizeof(data), "temperature %.2f \r\n", temperature);
+        // HAL_UART_Transmit_IT(&huart1, data, strlen(data));
+
+
+        // float voltage = generate_random_float(19, 21);
+        // float current = generate_random_float(5, 13);
+        // float power = voltage * current;
+        // updateUI(&u8g2, voltage, current, power);
+        // HAL_Delay(1000);
+    }
+    else if (htim->Instance == TIM16)
+    {
+        HAL_UART_Transmit_IT(&huart1, "AAAAAAAA\r\n", strlen("AAAAAAAA\r\n"));
+        if (HAL_IWDG_Refresh(&hiwdg) != HAL_OK)
+        {
+            Error_Handler();
+        }
+    }
+}
 
 /* USER CODE END PV */
 
@@ -177,13 +205,19 @@ int main(void)
   MX_USART1_UART_Init();
   MX_ADC1_Init();
   MX_I2C2_Init();
+  MX_IWDG_Init();
+  MX_TIM17_Init();
+  MX_TIM16_Init();
   /* USER CODE BEGIN 2 */
 
+    // HAL_GPIO_WritePin(XG_GPIO_Port,XG_Pin, isPowerBoot);
     u8g2Init(&u8g2);
 
     HAL_UART_Transmit_IT(&huart1, "Hello World\r\n", strlen("Hello World\r\n"));
 
     HAL_ADC_Start_DMA(&hadc1, adcValues, sizeof(adcValues));
+    HAL_TIM_Base_Start_IT(&htim16);
+    HAL_TIM_Base_Start_IT(&htim17);
 
   /* USER CODE END 2 */
 
@@ -191,35 +225,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
     while (1)
     {
-        HAL_UART_Transmit(&huart1, "World\r\n", strlen("World\r\n"), HAL_MAX_DELAY);
-        const uint32_t current_adc = adcValues[0];
-        const uint32_t voltage_adc = adcValues[1];
-        // int temperature_adc = adcValues[3];
+        // HAL_Delay(1500);
 
-        // float b = temperature_adc * (3.3 / 4095);
-        // float temperature = (1.43 - b) / 0.0043 + 25;
-
-        const double current = calculate_current(current_adc);
-        const double voltage = calculate_voltage(voltage_adc);
-
-
-        char data[50];
-        snprintf(data, sizeof(data), "voltage %d %.2fV \r\n", voltage_adc, voltage);
-        HAL_UART_Transmit(&huart1, data, strlen(data),HAL_MAX_DELAY);
-        snprintf(data, sizeof(data), "current %d %.2fA \r\n", current_adc, current);
-        HAL_UART_Transmit(&huart1, data, strlen(data),HAL_MAX_DELAY);
-        //
-        // snprintf(data, sizeof(data), "temperature %.2f \r\n", temperature);
-        // HAL_UART_Transmit_IT(&huart1, data, strlen(data));
-
-        HAL_Delay(1500);
-
-
-        // float voltage = generate_random_float(19, 21);
-        // float current = generate_random_float(5, 13);
-        // float power = voltage * current;
-        // updateUI(&u8g2, voltage, current, power);
-        // HAL_Delay(1000);
 
     /* USER CODE END WHILE */
 
@@ -244,11 +251,18 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV1;
+  RCC_OscInitStruct.PLL.PLLN = 8;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -258,11 +272,11 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }

@@ -86,7 +86,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* uartHandle)
   /** Initializes the peripherals clocks
   */
     PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART1;
-    PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_PCLK1;
+    PeriphClkInit.Usart1ClockSelection = RCC_USART1CLKSOURCE_HSI;
     if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
     {
       Error_Handler();
