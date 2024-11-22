@@ -51,7 +51,7 @@ const double R25 = 20000.0;
 const double R26 = 3300.0;
 const int adc_max = 4095;
 const double adc_max_voltage = 3.3;
-const int magnification = 40;
+const int magnification = 39;
 const int intervals = 1800;
 /* USER CODE END PTD */
 
@@ -150,43 +150,48 @@ float generate_random_float(float min, float max)
   */
 int main(void)
 {
-    /* USER CODE BEGIN 1 */
 
-    /* USER CODE END 1 */
+  /* USER CODE BEGIN 1 */
 
-    /* MCU Configuration--------------------------------------------------------*/
+  /* USER CODE END 1 */
 
-    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-    HAL_Init();
+  /* MCU Configuration--------------------------------------------------------*/
 
-    /* USER CODE BEGIN Init */
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-    /* USER CODE END Init */
+  /* USER CODE BEGIN Init */
 
-    /* Configure the system clock */
-    SystemClock_Config();
+  /* USER CODE END Init */
 
-    /* USER CODE BEGIN SysInit */
+  /* Configure the system clock */
+  SystemClock_Config();
 
-    /* USER CODE END SysInit */
+  /* USER CODE BEGIN SysInit */
 
-    /* Initialize all configured peripherals */
-    MX_GPIO_Init();
-    MX_DMA_Init();
-    MX_USART1_UART_Init();
-    MX_ADC1_Init();
-    MX_I2C2_Init();
-    /* USER CODE BEGIN 2 */
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_USART1_UART_Init();
+  MX_ADC1_Init();
+  MX_I2C2_Init();
+  /* USER CODE BEGIN 2 */
+
+    u8g2Init(&u8g2);
+
+    HAL_UART_Transmit_IT(&huart1, "Hello World\r\n", strlen("Hello World\r\n"));
 
     HAL_ADC_Start_DMA(&hadc1, adcValues, sizeof(adcValues));
-    u8g2Init(&u8g2);
-    HAL_UART_Transmit_IT(&huart1, "Hello World!\r\n", strlen("Hello World!\r\n"));
-    /* USER CODE END 2 */
 
-    /* Infinite loop */
-    /* USER CODE BEGIN WHILE */
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
     while (1)
     {
+        HAL_UART_Transmit(&huart1, "World\r\n", strlen("World\r\n"), HAL_MAX_DELAY);
         const uint32_t current_adc = adcValues[0];
         const uint32_t voltage_adc = adcValues[1];
         // int temperature_adc = adcValues[3];
@@ -203,7 +208,7 @@ int main(void)
         HAL_UART_Transmit(&huart1, data, strlen(data),HAL_MAX_DELAY);
         snprintf(data, sizeof(data), "current %d %.2fA \r\n", current_adc, current);
         HAL_UART_Transmit(&huart1, data, strlen(data),HAL_MAX_DELAY);
-
+        //
         // snprintf(data, sizeof(data), "temperature %.2f \r\n", temperature);
         // HAL_UART_Transmit_IT(&huart1, data, strlen(data));
 
@@ -216,11 +221,11 @@ int main(void)
         // updateUI(&u8g2, voltage, current, power);
         // HAL_Delay(1000);
 
-        /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-        /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
     }
-    /* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**
@@ -229,38 +234,38 @@ int main(void)
   */
 void SystemClock_Config(void)
 {
-    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-    /** Configure the main internal regulator output voltage
-    */
-    HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1);
+  /** Configure the main internal regulator output voltage
+  */
+  HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-    /** Initializes the RCC Oscillators according to the specified parameters
-    * in the RCC_OscInitTypeDef structure.
-    */
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-    RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-    RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
-    RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-    {
-        Error_Handler();
-    }
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
 
-    /** Initializes the CPU, AHB and APB buses clocks
-    */
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
-        | RCC_CLOCKTYPE_PCLK1;
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
-    {
-        Error_Handler();
-    }
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /* USER CODE BEGIN 4 */
@@ -273,13 +278,13 @@ void SystemClock_Config(void)
   */
 void Error_Handler(void)
 {
-    /* USER CODE BEGIN Error_Handler_Debug */
+  /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
     __disable_irq();
     while (1)
     {
     }
-    /* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
